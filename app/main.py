@@ -39,9 +39,8 @@ def clear_flow():
 def log_step(message: str):
     FLOW_LOGS.append(message)
 
-# ==========================================
 # 1. USERS
-# ==========================================
+
 @app.post("/users/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     log_step("Validating User Data")
@@ -87,9 +86,8 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.commit()
     return None
 
-# ==========================================
+
 # 2. PRODUCTS
-# ==========================================
 @app.post("/products/", response_model=schemas.ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
     log_step("Adding new product to inventory")
@@ -130,9 +128,8 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     db.commit()
     return None
 
-# ==========================================
+
 # 3. CARTS & ITEMS
-# ==========================================
 @app.post("/users/{user_id}/cart/", response_model=schemas.CartResponse, status_code=status.HTTP_201_CREATED)
 def create_cart(user_id: int, db: Session = Depends(get_db)):
     log_step(f"Checking if User {user_id} has active cart")
