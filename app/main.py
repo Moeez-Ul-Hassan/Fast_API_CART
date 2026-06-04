@@ -6,6 +6,10 @@ import schemas
 from database import engine, get_db
 from logger import logger
 
+# Import Custom Validators and Exceptions
+from validators import validate_name, validate_email, validate_price, validate_stock, validate_quantity
+from exceptions import EmailAlreadyExistsException
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Ultimate Learning Cart API")
@@ -39,13 +43,19 @@ def clear_flow():
 def log_step(message: str):
     FLOW_LOGS.append(message)
 
+
 # 1. USERS
 
 @app.post("/users/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     log_step("Validating User Data")
+    
+    validate_name(user.name)
+    validate_email(user.email)
+
     if db.query(models.User).filter(models.User.email == user.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise EmailAlreadyExistsException()
+        
     new_user = models.User(email=user.email, name=user.name)
     db.add(new_user)
     db.commit()
@@ -68,8 +78,12 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 @app.put("/users/{user_id}", response_model=schemas.UserResponse)
 def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
     log_step(f"Updating User ID: {user_id}")
+    validate_name(user_update.name)
+    validate_email(user_update.email)
+
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user: raise HTTPException(status_code=404, detail="User not found")
+    
     user.email = user_update.email
     user.name = user_update.name
     db.commit()
@@ -88,8 +102,13 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 
 
 # 2. PRODUCTS
+
 @app.post("/products/", response_model=schemas.ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
+    log_step("Validating Product Data")
+    validate_price(product.price)
+    validate_stock(product.stock)
+
     log_step("Adding new product to inventory")
     new_product = models.Product(name=product.name, price=product.price, stock=product.stock)
     db.add(new_product)
@@ -111,9 +130,12 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 @app.patch("/products/{product_id}/stock", response_model=schemas.ProductResponse)
 def update_stock(product_id: int, data: schemas.StockUpdate, db: Session = Depends(get_db)):
-    log_step(f"Patching stock for Product ID: {product_id}")
+    log_step(f"Validating and Patching stock for Product ID: {product_id}")
+    validate_stock(data.stock)
+    
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product: raise HTTPException(status_code=404, detail="Product not found")
+    
     product.stock = data.stock
     db.commit()
     db.refresh(product)
@@ -130,6 +152,7 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
 
 # 3. CARTS & ITEMS
+
 @app.post("/users/{user_id}/cart/", response_model=schemas.CartResponse, status_code=status.HTTP_201_CREATED)
 def create_cart(user_id: int, db: Session = Depends(get_db)):
     log_step(f"Checking if User {user_id} has active cart")
@@ -151,6 +174,9 @@ def get_cart(cart_id: int, db: Session = Depends(get_db)):
 
 @app.post("/cart/{cart_id}/items/", response_model=schemas.CartItemResponse, status_code=status.HTTP_201_CREATED)
 def add_item_to_cart(cart_id: int, item: schemas.ItemAdd, db: Session = Depends(get_db)):
+    log_step("Validating Quantity")
+    validate_quantity(item.quantity)
+    
     log_step(f"Validating Cart {cart_id} is active")
     cart = db.query(models.Cart).filter(models.Cart.id == cart_id, models.Cart.status == "active").first()
     if not cart: raise HTTPException(status_code=404, detail="Active cart not found")
@@ -159,7 +185,8 @@ def add_item_to_cart(cart_id: int, item: schemas.ItemAdd, db: Session = Depends(
     product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
     if not product: raise HTTPException(status_code=404, detail="Product not found")
     
-    if product.stock < item.quantity: raise HTTPException(status_code=400, detail="Insufficient stock")
+    if product.stock < item.quantity: 
+        raise HTTPException(status_code=400, detail="Insufficient stock")
 
     new_item = models.CartItem(cart_id=cart_id, product_id=item.product_id, quantity=item.quantity, price_at_addition=product.price)
     db.add(new_item)
