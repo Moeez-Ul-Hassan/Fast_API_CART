@@ -212,3 +212,5 @@ def delete_cart(cart_id: int, db: Session = Depends(get_db)):
     cart.status = "deleted"
     db.commit()
     return None
+
+#
