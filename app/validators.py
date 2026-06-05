@@ -30,3 +30,4 @@ def validate_stock(stock: int):
 def validate_quantity(quantity: int):
     if quantity <= 0:
         raise InvalidQuantityException()
+    

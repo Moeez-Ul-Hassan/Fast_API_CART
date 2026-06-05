@@ -155,9 +155,19 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
 @app.post("/users/{user_id}/cart/", response_model=schemas.CartResponse, status_code=status.HTTP_201_CREATED)
 def create_cart(user_id: int, db: Session = Depends(get_db)):
+    log_step(f"Verifying User {user_id} exists in DB")
+    
+    # 1. Check if the user exists using native HTTPException
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 2. Check if they already have an active cart
     log_step(f"Checking if User {user_id} has active cart")
     if db.query(models.Cart).filter(models.Cart.user_id == user_id, models.Cart.status == "active").first():
-        raise HTTPException(status_code=400, detail="User already has active cart.")
+        raise HTTPException(status_code=400, detail="User already has an active cart.")
+    
+    # 3. Safe to create the cart
     new_cart = models.Cart(user_id=user_id, status="active")
     db.add(new_cart)
     db.commit()
@@ -199,10 +209,33 @@ def add_item_to_cart(cart_id: int, item: schemas.ItemAdd, db: Session = Depends(
 def checkout_cart(cart_id: int, db: Session = Depends(get_db)):
     log_step(f"Processing checkout for Cart {cart_id}")
     cart = db.query(models.Cart).filter(models.Cart.id == cart_id, models.Cart.status == "active").first()
-    if not cart or not cart.items: raise HTTPException(status_code=400, detail="Invalid/Empty cart")
+    
+    if not cart: 
+        raise HTTPException(status_code=404, detail="Active Cart not found")
+    if not cart.items: 
+        raise HTTPException(status_code=400, detail="Cannot checkout an empty cart.")
+    
+    log_step("Verifying final stock and deducting inventory")
+    # 1. Loop through every item in the cart
+    for item in cart.items:
+        product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+        
+        # 2. Final Security Check: Ensure nobody bought the item while it was sitting in the cart!
+        if not product or product.stock < item.quantity:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Checkout failed: Product ID {item.product_id} only has {product.stock if product else 0} units left in stock."
+            )
+            
+        # 3. Deduct the stock!
+        product.stock -= item.quantity
+
+    # 4. Finalize the checkout
     cart.status = "checked_out"
     db.commit()
-    return {"message": "Checkout successful."}
+    log_step("Checkout successful. Inventory updated.")
+    
+    return {"message": "Checkout successful. Inventory has been deducted."}
 
 @app.delete("/cart/{cart_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cart(cart_id: int, db: Session = Depends(get_db)):

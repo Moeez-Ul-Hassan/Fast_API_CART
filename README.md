@@ -1,4 +1,4 @@
-# Ultimate Learning Cart API (FastAPI Architecture)
+# Cart API (FastAPI Architecture)
 
 A production-grade, fully observable E-Commerce Cart API built with **FastAPI**, **SQLAlchemy**, and **MySQL**. This project was designed to demonstrate complete backend data lifecycles, relational database integrity, and real-time request tracing.
 
